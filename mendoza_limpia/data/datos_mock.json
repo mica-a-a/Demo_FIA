@@ -1,0 +1,105 @@
+{
+  "zonas": [
+    {
+      "id": 1,
+      "nombre": "Centro",
+      "hist_manana": 0.55,
+      "hist_tarde": 0.45,
+      "afectada_evento": 1
+    },
+    {
+      "id": 2,
+      "nombre": "Quinta Sección",
+      "hist_manana": 0.5,
+      "hist_tarde": 0.6,
+      "afectada_evento": 0
+    },
+    {
+      "id": 3,
+      "nombre": "Sexta Sección",
+      "hist_manana": 0.35,
+      "hist_tarde": 0.4,
+      "afectada_evento": 0
+    },
+    {
+      "id": 4,
+      "nombre": "Bombal",
+      "hist_manana": 0.6,
+      "hist_tarde": 0.5,
+      "afectada_evento": 0
+    },
+    {
+      "id": 5,
+      "nombre": "Parque",
+      "hist_manana": 0.3,
+      "hist_tarde": 0.55,
+      "afectada_evento": 1
+    },
+    {
+      "id": 6,
+      "nombre": "Pedro Molina",
+      "hist_manana": 0.4,
+      "hist_tarde": 0.35,
+      "afectada_evento": 0
+    }
+  ],
+  "contexto": {
+    "clima": "calor",
+    "turno": 0,
+    "evento": 1
+  },
+  "reportes": [
+    {
+      "id": 1,
+      "zona_id": 4,
+      "descripcion": "Contenedor desbordado frente a una escuela",
+      "origen": "vecino",
+      "estado": "pendiente",
+      "usado": 0,
+      "creado_en": "2026-10-20T08:15:00",
+      "validado_en": null
+    },
+    {
+      "id": 2,
+      "zona_id": 1,
+      "descripcion": "Bolsas acumuladas en la esquina del mercado",
+      "origen": "inspector",
+      "estado": "validado",
+      "usado": 1,
+      "creado_en": "2026-10-19T17:40:00",
+      "validado_en": "2026-10-19T18:05:00"
+    },
+    {
+      "id": 3,
+      "zona_id": 3,
+      "descripcion": "Contenedor con la tapa rota",
+      "origen": "vecino",
+      "estado": "descartado",
+      "usado": 0,
+      "creado_en": "2026-10-19T10:20:00",
+      "validado_en": "2026-10-19T11:00:00"
+    }
+  ],
+  "propuestas": [],
+  "despachos": [],
+  "recalibraciones": [
+    {
+      "id": 1,
+      "precision": 72,
+      "cobertura": 68,
+      "km_var": -12,
+      "estado": "propuesta",
+      "decidido_por": null,
+      "creado_en": "2026-10-20T07:00:00",
+      "decidido_en": null
+    }
+  ],
+  "eventos_log": [],
+  "seq": {
+    "reportes": 3,
+    "propuestas": 0,
+    "despachos": 0,
+    "recalibraciones": 1,
+    "eventos_log": 0
+  }
+}
