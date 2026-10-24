@@ -1,7 +1,7 @@
 """Modelos: reglas de negocio sobre el archivo JSON (incluye las decisiones no delegables N1–N4)."""
 from collections import Counter
-from . import predictor
-from .db import tx, now, next_id
+from . import predictor, recorridos
+from .db import tx, now, next_id, load
 class Conflicto(Exception): pass
 def _log(d, msg, actor, texto): d["eventos_log"].append({"id": next_id(d, "eventos_log"), "mensaje": msg, "actor": actor, "texto": texto, "creado_en": now()})
 def _mapa(d):
@@ -31,13 +31,13 @@ def set_contexto(clima, turno, evento):
     with tx() as d:
         d["contexto"] = {"clima": clima, "turno": int(turno), "evento": int(bool(evento))}
         _log(d, "1", "Agente 1", f"Datos del día actualizados: clima {clima}, turno {'mañana' if int(turno)==0 else 'tarde'}"); _regenerar(d)
-def crear_reporte(zona, desc, origen):
+def crear_reporte(zona, desc, origen, tipo="Desborde de basura", direccion=""):
     with tx() as d:
         z = next((z for z in d["zonas"] if z["nombre"] == zona), None)
         if not z or not desc.strip() or origen not in ("vecino", "inspector"): raise Conflicto("Datos del reporte inválidos")
-        d["reportes"].append({"id": next_id(d, "reportes"), "zona_id": z["id"], "descripcion": desc.strip()[:300], "origen": origen,
-                              "estado": "pendiente", "usado": 0, "creado_en": now(), "validado_en": None})
-        _log(d, "0", origen.capitalize(), f"Informa un desborde en {z['nombre']}")
+        d["reportes"].append({"id": next_id(d, "reportes"), "zona_id": z["id"], "descripcion": desc.strip()[:300], "origen": origen, "tipo": tipo.strip()[:60],
+                              "direccion": direccion.strip()[:120], "estado": "pendiente", "usado": 0, "creado_en": now(), "validado_en": None})
+        _log(d, "0", origen.capitalize(), f"Informa «{tipo}» en {z['nombre']}")
 def revisar_reporte(rid, ok):
     with tx() as d:
         r = next((r for r in d["reportes"] if r["id"] == rid), None)
@@ -111,3 +111,4 @@ def estado():
         return {"contexto": d["contexto"], "zonas": _mapa(d), "propuesta": dict(p), "despacho": _despacho(d), "reportes": rep, "recal": d["recalibraciones"][-1],
                 "kpis": {"total": len(d["reportes"]), "pendientes": c["pendiente"], "validados": c["validado"], "descartados": c["descartado"]},
                 "log": list(reversed(d["eventos_log"]))[:40]}
+def consultar_recolector(direccion, zona=None): return recorridos.consultar(load(), direccion, zona)

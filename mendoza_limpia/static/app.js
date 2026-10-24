@@ -1,20 +1,19 @@
-const $ = id => document.getElementById(id); const U = { aj: false, rj: false, sel: [] }; let E = null, rol = null, last = "";
+const $ = id => document.getElementById(id); const U = { aj: false, rj: false, sel: [] }; let E = null, rol = null, modo = null, last = "";
 const toast = m => { const t = $("toast"); t.textContent = m; t.className = "on"; setTimeout(() => t.className = "", 3200) };
 async function api(p, b) { const r = await fetch("/api" + p, { method: b === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: b === undefined ? undefined : JSON.stringify(b) }); const j = await r.json(); if (!r.ok) { toast("⚠ " + (j.error || "Error")); throw new Error(j.error) } return j }
 async function act(p, b) { try { E = await api(p, b); U.aj = U.rj = false; draw() } catch (e) { } }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const hora = s => (s || "").slice(11, 16), pill = (n, t) => `<span class="pill ${n}">${(t || n).toUpperCase()}</span>`;
 const color = n => n === "alto" ? "hi" : n === "medio" ? "md" : "lo";
-const NM = { vecino: "🏘️ Vecino / inspector", operador: "🧑‍💼 Operador de Higiene Urbana", supervisor: "🛡️ Supervisor", cuadrilla: "🚛 Cuadrilla" };
-function togg(i) { const z = E.propuesta.ruta[i], k = U.sel.indexOf(z); k >= 0 ? U.sel.splice(k, 1) : U.sel.push(z); draw() }
+const NM={vecino:"📝 Reclamo",operador:"🧑‍💼 Operador de Higiene Urbana",supervisor:"🛡️ Supervisor",cuadrilla:"🚛 Cuadrilla",ureclamo:"📝 Hacer un reclamo",recolector:"🕒 Horario del recolector"};function togg(i) { const z = E.propuesta.ruta[i], k = U.sel.indexOf(z); k >= 0 ? U.sel.splice(k, 1) : U.sel.push(z); draw() }
 function go(r) { rol = r; draw(); scrollTo(0, 0) }
 function logBox() { return `<div class="card"><h2>📜 Registro de mensajes del sistema</h2><div class="log">${E.log.map(l => `<div><b>${l.mensaje || "·"}</b> · ${hora(l.creado_en)} · <b>${esc(l.actor)}</b>: ${esc(l.texto)}</div>`).join("") || "<span class='mu'>Todavía no hay mensajes.</span>"}</div></div>` }
 function riesgo() { return `<div class="tw"><table><tr><th>Zona</th><th>Puntaje</th><th></th><th>Riesgo</th></tr>${E.zonas.map(z => `<tr><td>${esc(z.nombre)}</td><td>${z.puntaje.toFixed(2)}</td><td><div class="bar"><i style="width:${z.puntaje * 100}%;background:var(--${color(z.nivel)})"></i></div></td><td>${pill(z.nivel)}</td></tr>`).join("")}</table></div><p class="mu">Puntaje = histórico del turno × (1 + clima) + eventos + reportes validados. Reglas simples y explicables, no un modelo entrenado.</p>` }
-function repList(f, acc) { const l = E.reportes.filter(f); return l.map(r => `<div class="rep"><span class="t"><b>#${r.id} · ${esc(r.zona)}</b> — ${esc(r.descripcion)}<br><span class="mu">${r.origen} · ${hora(r.creado_en)}</span></span>${pill(r.estado)}${acc && r.estado === "pendiente" ? `<button class="b ok" onclick="act('/reportes/${r.id}/validar',{})">Validar</button><button class="b gh" onclick="act('/reportes/${r.id}/descartar',{})">Descartar</button>` : ""}</div>`).join("") }
+function repList(f, acc) { const l = E.reportes.filter(f); return l.map(r => `<div class="rep"><span class="t"><b>#${r.id} · ${esc(r.zona)}</b>${r.tipo?" · "+esc(r.tipo):""} — ${esc(r.descripcion)}${r.direccion?" ("+esc(r.direccion)+")":""}<br><span class="mu">${r.origen} · ${hora(r.creado_en)}</span></span>${pill(r.estado)}${acc && r.estado === "pendiente" ? `<button class="b ok" onclick="act('/reportes/${r.id}/validar',{})">Validar</button><button class="b gh" onclick="act('/reportes/${r.id}/descartar',{})">Descartar</button>` : ""}</div>`).join("") }
 function home() {
-    const k = E.kpis; return `<div class="hero"><h1>Anticipamos dónde se va a acumular la basura</h1><p>El sistema predice el riesgo por zona y turno y propone la ruta. Los camiones los despacha siempre una persona.</p><div class="stats"><div class="stat"><b>${k.total}</b><span>reportes guardados</span></div><div class="stat"><b>${k.pendientes}</b><span>pendientes de validar</span></div><div class="stat"><b>${k.validados}</b><span>validados</span></div></div></div>
+const k = E.kpis; return `<div class="hero"><h1>Anticipamos dónde se va a acumular la basura</h1><p>El sistema predice el riesgo por zona y turno y propone la ruta. Los camiones los despacha siempre una persona.</p><div class="stats"><div class="stat"><b>${k.total}</b><span>reportes guardados</span></div><div class="stat"><b>${k.pendientes}</b><span>pendientes de validar</span></div><div class="stat"><b>${k.validados}</b><span>validados</span></div></div></div>
 <h2>¿Quién ingresa?</h2><div class="grid">
-<button class="role" onclick="go('vecino')"><span class="ic">🏘️</span><b>Vecino / inspector</b><small>Avisa de un desborde en la vía pública.</small></button>
+<button class="role" onclick="go('vecino')"><span class="ic">📝</span><b>Reclamo</b><small>Cargá un reclamo de desborde (vecino o inspector).</small></button>
 <button class="role" onclick="go('operador')"><span class="ic">🧑‍💼</span><b>Operador de Higiene Urbana</b><small>Valida reportes, decide la ruta y despacha.</small></button>
 <button class="role" onclick="go('supervisor')"><span class="ic">🛡️</span><b>Supervisor</b><small>Recalibración semanal y escalada.</small></button>
 <button class="role" onclick="go('cuadrilla')"><span class="ic">🚛</span><b>Cuadrilla de recolección</b><small>Recorre la ruta y reporta lo que ve.</small></button></div><p class="mu">Los agentes de software (Predictor y Planificador) no tienen ingreso: trabajan por detrás y le hablan al Operador.</p>`+ logBox()
@@ -61,8 +60,34 @@ function cuadrilla() {
  ${d.salida_confirmada_en && !d.resultado_en ? `<h3>Informar resultado</h3><div class="row">Contenedores levantados <input id="rc" type="number" min="0" value="${p.ruta_final.length * 6}" style="width:90px">Desbordes vistos <input id="rd" type="number" min="0" value="1" style="width:80px"><button class="b" onclick="act('/cuadrilla/resultado',{contenedores:+$('rc').value,desbordes:+$('rd').value})">Enviar al Operador</button></div>` : ""}${d.resultado_en ? "<p>✅ Resultado enviado al Operador. ¡Buen trabajo!</p>" : ""}
  <p class="mu">La cuadrilla no cambia la ruta ni saltea zonas por su cuenta: cualquier cambio lo autoriza el Operador.</p>`: `<p class="mu">Todavía no hay una ruta despachada. Cuando el Operador la apruebe y despache, aparece acá.</p>`}</div>` + logBox()
 }
-const V = { home, vecino, operador, supervisor, cuadrilla };
-function draw() { if (!E) return; $("who").innerHTML = rol ? `${NM[rol]} · <a href="#" onclick="go(null);return false">Cambiar de rol</a>` : ""; $("app").innerHTML = V[rol || "home"](); last = JSON.stringify(E) }
+function modoSet(m){modo=m;rol=null;draw();scrollTo(0,0)}
+function landing(){return `<div class="hero"><h1>Mendoza Limpia</h1><p>Anticipamos dónde se va a acumular la basura para que la recolección llegue antes de que sea un problema.</p></div>
+<h2>¿Cómo ingresás?</h2><div class="grid">
+<button class="role" onclick="modoSet('usuario')"><span class="ic">👤</span><b>Usuario</b><small>Hacé un reclamo o consultá cuándo pasa el recolector por tu casa.</small></button>
+<button class="role" onclick="modoSet('operador')"><span class="ic">🧑‍💼</span><b>Operador</b><small>Reclamos, rutas, supervisión y cuadrilla.</small></button></div>`}
+function usuario(){return `<div class="hero"><h1>Hola 👋</h1><p>Contanos qué pasa en tu barrio o consultá cuándo pasa el recolector.</p></div><div class="grid">
+<button class="role" onclick="go('ureclamo')"><span class="ic">📝</span><b>Hacer un reclamo</b><small>Desborde de basura, contenedor roto, basural u otro.</small></button>
+<button class="role" onclick="go('recolector')"><span class="ic">🕒</span><b>¿Cuándo pasa el recolector?</b><small>Ingresá tu dirección y mirá el horario.</small></button></div>`}
+const TIPOS=["Desborde de basura","Contenedor roto o faltante","Basural / residuos en la calle","Recolección que no pasó","Otro"];
+const zonasOrd=()=>E.zonas.map(z=>z.nombre).sort().map(n=>`<option>${esc(n)}</option>`).join("");
+function ureclamo(){return `<div class="card"><h2>📝 Hacer un reclamo</h2><p class="mu">Tu reclamo llega al panel del Operador de Higiene Urbana, que lo revisa y lo valida antes de usarlo.</p>
+<div class="row"><select id="ut">${TIPOS.map(t=>`<option>${t}</option>`).join("")}</select><select id="uz">${zonasOrd()}</select></div>
+<div class="row" style="margin-top:8px"><input id="ud" placeholder="Dirección o referencia (ej: San Martín 1200)" style="flex:1;min-width:220px"><input id="ux" placeholder="Contanos qué pasa" maxlength="300" style="flex:2;min-width:220px"></div>
+<p><button class="b" onclick="uenviar()">Enviar reclamo</button></p></div>
+<div class="card"><h2>📋 Últimos reclamos</h2>${repList(()=>true,false)||"<span class='mu'>Todavía no hay reclamos.</span>"}</div>`}
+function uenviar(){const x=$("ux").value.trim();if(!x)return toast("⚠ Contanos qué pasa");act("/reportes",{zona:$("uz").value,tipo:$("ut").value,direccion:$("ud").value.trim(),descripcion:x,origen:"vecino"}).then(()=>toast("✔ Reclamo enviado. Lo revisa el Operador."))}
+let R=null;
+function recolector(){return `<div class="card"><h2>🕒 ¿Cuándo pasa el recolector por mi cuadra?</h2><p class="mu">Ingresá tu calle y altura. Si no la reconocemos, elegí tu zona en la lista. Horarios de prueba.</p>
+<div class="row"><input id="rq" placeholder="Ej: San Martín 1200" value="${R?esc(R.q):""}" style="flex:1;min-width:220px"><select id="rz"><option value="">Detectar por dirección</option>${zonasOrd()}</select><button class="b" onclick="consultar()">Consultar</button></div></div>${R?resultadoR():""}`}
+async function consultar(){const q=$("rq").value.trim();try{R=Object.assign({q},await api("/recolector",{direccion:q,zona:$("rz").value}));draw()}catch(e){R=null}}
+function resultadoR(){return `<div class="card"><h2>📍 ${esc(R.zona)}</h2><p class="mu">${R.detectada?"Zona detectada por tu dirección.":"Zona elegida por vos."}</p>
+${R.pasos.map(p=>`<div class="rep"><span class="t"><b>${p.hora} h</b> · ${esc(p.turno)}</span><span class="pill ${p.paso?"bajo":"medio"}">${p.paso?"YA PASÓ":"EN "+p.faltan}</span></div>`).join("")}
+<div class="alert" style="margin-top:12px">${esc(R.mensaje)}</div>${R.ruta_hoy?"<p>🚛 Hoy hay una ruta despachada que incluye tu zona.</p>":""}</div>`}
+const V={home,vecino,operador,supervisor,cuadrilla,ureclamo,recolector};
+function draw(){if(!E)return;
+ const lk=(t,f)=>`<a href="#" onclick="${f};return false">${t}</a>`;
+ $("who").innerHTML=!modo?"":rol?`${NM[rol]} · ${lk("Volver","go(null)")} · ${lk("Pantalla principal","modoSet(null)")}`:`${modo==="usuario"?"👤 Usuario":"🧑‍💼 Operador"} · ${lk("Pantalla principal","modoSet(null)")}`;
+ $("app").innerHTML=!modo?landing():rol?V[rol]():modo==="usuario"?usuario():home();last=JSON.stringify(E)}
 $("reset").onclick = async e => { e.preventDefault(); if (confirm("¿Reiniciar la demo y borrar los datos guardados?")) { E = await api("/demo/reset", {}); rol = null; draw() } };
 async function poll() { const a = document.activeElement; if (a && ["INPUT", "SELECT"].includes(a.tagName)) return; try { const n = await api("/estado"); if (JSON.stringify(n) !== last) { E = n; draw() } } catch (e) { } }
 (async () => { E = await api("/estado"); draw(); setInterval(poll, 2500) })();
