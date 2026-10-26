@@ -80,18 +80,36 @@ def salida():
         x = _despacho(d)
         if not x: raise Conflicto("Todavía no hay una ruta despachada")
         x["salida_confirmada_en"] = now(); _log(d, "9", "Cuadrilla", "Confirma la salida")
-def resultado(cont, desb):
+def _verificables(d):
+    """Reclamos validados cuya zona estaba en la ruta despachada: la cuadrilla debe verificarlos."""
+    x = _despacho(d)
+    if not x or not x["salida_confirmada_en"] or x["resultado_en"]: return []
+    p = next((p for p in reversed(d["propuestas"]) if p["estado"] == "despachada"), None)
+    zn = {z["id"]: z["nombre"] for z in d["zonas"]}
+    return [r for r in d["reportes"] if p and r["estado"] == "validado" and not r["usado"] and zn[r["zona_id"]] in (p["ruta_final"] or [])]
+def resultado(cont, desb, verifs=None):
     with tx() as d:
         x = _despacho(d)
         if not x or not x["salida_confirmada_en"]: raise Conflicto("Primero hay que confirmar la salida")
-        x.update(contenedores=max(0, int(cont)), desbordes=max(0, int(desb)), resultado_en=now()); _log(d, "10", "Cuadrilla", "Informa el resultado real de la calle al Operador")
+        ver = _verificables(d); resp = {int(v.get("id", 0)): v for v in (verifs or [])}
+        for r in ver:
+            if r["id"] not in resp: raise Conflicto(f"Falta responder sobre el reclamo #{r['id']}")
+        lev = des = 0
+        for r in ver:
+            v = resp[r["id"]]
+            if v.get("paso"):
+                if v.get("habia"):
+                    n = max(0, int(v.get("cuantos") or 0)); r.update(estado="resuelto", levantados=n, comentario=None, resuelto_en=now()); lev += n; des += 1
+                else: r.update(estado="no_constatado", comentario="Desborde inexistente: la cuadrilla pasó y no lo encontró", resuelto_en=now())
+            else: r.update(estado="pendiente", comentario="No atendido: " + (v.get("motivo") or "sin motivo"), validado_en=None)
+        if ver: cont, desb = lev, des
+        x.update(contenedores=max(0, int(cont)), desbordes=max(0, int(desb)), resultado_en=now())
+        _log(d, "10", "Cuadrilla", f"Informa el resultado real de la calle ({len(ver)} reclamos verificados)" if ver else "Informa el resultado real de la calle al Operador")
 def nuevo_turno():
     with tx() as d:
         p = _actual(d)
         if p["estado"] not in ("despachada", "rechazada"): raise Conflicto("El turno actual todavía no terminó")
         p["estado"] = "cerrada"
-        for r in d["reportes"]:
-            if r["estado"] == "validado": r["usado"] = 1
         _log(d, "-", "Sistema", "Nuevo turno: el Agente 2 prepara otra propuesta"); _actual(d)
 def decidir_recal(ok):
     with tx() as d:
@@ -109,6 +127,7 @@ def estado():
         rep = [dict(r, zona=zn[r["zona_id"]]) for r in reversed(d["reportes"])][:40]
         c = Counter(r["estado"] for r in d["reportes"])
         return {"contexto": d["contexto"], "zonas": _mapa(d), "propuesta": dict(p), "despacho": _despacho(d), "reportes": rep, "recal": d["recalibraciones"][-1],
-                "kpis": {"total": len(d["reportes"]), "pendientes": c["pendiente"], "validados": c["validado"], "descartados": c["descartado"]},
+                "verificar": [dict(r, zona=zn[r["zona_id"]]) for r in _verificables(d)],
+                "kpis": {"total": len(d["reportes"]), "pendientes": c["pendiente"], "validados": c["validado"], "descartados": c["descartado"], "resueltos": c["resuelto"]},
                 "log": list(reversed(d["eventos_log"]))[:40]}
 def consultar_recolector(direccion, zona=None): return recorridos.consultar(load(), direccion, zona)

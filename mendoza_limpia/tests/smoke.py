@@ -18,7 +18,7 @@ m.decidir("aprobada", "operador"); m.set_contexto("lluvia", 1, False)
 assert m.estado()["propuesta"]["estado"] == "pendiente", "cambiar el mapa invalida la decisión previa"
 m.escalar(); m.decidir("aprobada", "supervisor"); m.despachar("supervisor")
 assert falla(m.resultado, 3, 1), "primero se confirma la salida"
-m.salida(); m.resultado(12, 2); m.nuevo_turno()
+m.salida(); m.resultado(12, 2, [{"id": x["id"], "paso": True, "habia": True, "cuantos": 3} for x in m.estado()["verificar"]]); m.nuevo_turno()
 assert m.estado()["propuesta"]["estado"] == "pendiente"
 m.decidir("rechazada", "operador", motivo="Falta personal"); assert falla(m.despachar, "operador")
 m.decidir_recal(True); assert falla(m.decidir_recal, True)
