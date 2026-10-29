@@ -1,6 +1,7 @@
 """Modelos: reglas de negocio sobre el archivo JSON (incluye las decisiones no delegables N1–N4)."""
 from collections import Counter
-from . import predictor, recorridos
+from . import predictor, recorridos, security
+from . import db as _db
 from .db import tx, now, next_id, load
 class Conflicto(Exception): pass
 def _log(d, msg, actor, texto): d["eventos_log"].append({"id": next_id(d, "eventos_log"), "mensaje": msg, "actor": actor, "texto": texto, "creado_en": now()})
@@ -31,13 +32,19 @@ def set_contexto(clima, turno, evento):
     with tx() as d:
         d["contexto"] = {"clima": clima, "turno": int(turno), "evento": int(bool(evento))}
         _log(d, "1", "Agente 1", f"Datos del día actualizados: clima {clima}, turno {'mañana' if int(turno)==0 else 'tarde'}"); _regenerar(d)
-def crear_reporte(zona, desc, origen, tipo="Desborde de basura", direccion=""):
+def crear_reporte(zona, desc, origen, tipo="Desborde de basura", direccion="", ip="0.0.0.0", dev="", ua=""):
+    err = None
     with tx() as d:
         z = next((z for z in d["zonas"] if z["nombre"] == zona), None)
         if not z or not desc.strip() or origen not in ("vecino", "inspector"): raise Conflicto("Datos del reporte inválidos")
-        d["reportes"].append({"id": next_id(d, "reportes"), "zona_id": z["id"], "descripcion": desc.strip()[:300], "origen": origen, "tipo": tipo.strip()[:60],
-                              "direccion": direccion.strip()[:120], "estado": "pendiente", "usado": 0, "creado_en": now(), "validado_en": None})
-        _log(d, "0", origen.capitalize(), f"Informa «{tipo}» en {z['nombre']}")
+        h = security.huella(d, ip, dev, ua)
+        try: security.controlar(d, h)
+        except security.Bloqueado as e: err = str(e)      # el bloqueo queda guardado aunque se rechace el reclamo
+        else:
+            d["reportes"].append(dict({"id": next_id(d, "reportes"), "zona_id": z["id"], "descripcion": desc.strip()[:300], "origen": origen, "tipo": tipo.strip()[:60],
+                                       "direccion": direccion.strip()[:120], "estado": "pendiente", "usado": 0, "creado_en": now(), "validado_en": None}, **h))
+            _log(d, "0", origen.capitalize(), f"Informa «{tipo}» en {z['nombre']}")
+    if err: raise Conflicto(err)
 def revisar_reporte(rid, ok):
     with tx() as d:
         r = next((r for r in d["reportes"] if r["id"] == rid), None)
@@ -53,7 +60,7 @@ def decidir(decision, actor, zonas=None, motivo=None):
         if actor == "supervisor" and not p["escalada"]: raise Conflicto("El Supervisor decide solo si el Operador no respondió (N4)")
         ruta = list(p["ruta"])
         if decision == "ajustada":
-            ruta = list(dict.fromkeys(z for z in (zonas or []) if z in ruta))  # respeta el orden elegido
+            ruta = list(dict.fromkeys(z for z in (zonas or []) if z in ruta))  # respeta el orden elegido por la persona
             if not ruta: raise Conflicto("El ajuste no puede dejar la ruta vacía")
         elif decision == "rechazada": ruta = None
         elif decision != "aprobada": raise Conflicto("Decisión inválida")
@@ -102,6 +109,8 @@ def resultado(cont, desb, verifs=None):
                     n = max(0, int(v.get("cuantos") or 0)); r.update(estado="resuelto", levantados=n, comentario=None, resuelto_en=now()); lev += n; des += 1
                 else: r.update(estado="no_constatado", comentario="Desborde inexistente: la cuadrilla pasó y no lo encontró", resuelto_en=now())
             else: r.update(estado="pendiente", comentario="No atendido: " + (v.get("motivo") or "sin motivo"), validado_en=None)
+        for r in ver:
+            if r["estado"] == "no_constatado": security.falta(d, r)
         if ver: cont, desb = lev, des
         x.update(contenedores=max(0, int(cont)), desbordes=max(0, int(desb)), resultado_en=now())
         _log(d, "10", "Cuadrilla", f"Informa el resultado real de la calle ({len(ver)} reclamos verificados)" if ver else "Informa el resultado real de la calle al Operador")
@@ -124,10 +133,27 @@ def nueva_semana():
 def estado():
     with tx() as d:
         zn = {z["id"]: z["nombre"] for z in d["zonas"]}; p = _actual(d)
-        rep = [dict(r, zona=zn[r["zona_id"]]) for r in reversed(d["reportes"])][:40]
+        OCULTO = ("ip_hash", "dev_hash", "ip_mask", "ua")
+        rep = [dict({k: v for k, v in r.items() if k not in OCULTO}, zona=zn[r["zona_id"]]) for r in reversed(d["reportes"])][:40]
         c = Counter(r["estado"] for r in d["reportes"])
         return {"contexto": d["contexto"], "zonas": _mapa(d), "propuesta": dict(p), "despacho": _despacho(d), "reportes": rep, "recal": d["recalibraciones"][-1],
-                "verificar": [dict(r, zona=zn[r["zona_id"]]) for r in _verificables(d)],
+                "verificar": [dict({k: v for k, v in r.items() if k not in OCULTO}, zona=zn[r["zona_id"]]) for r in _verificables(d)],
                 "kpis": {"total": len(d["reportes"]), "pendientes": c["pendiente"], "validados": c["validado"], "descartados": c["descartado"], "resueltos": c["resuelto"]},
                 "log": list(reversed(d["eventos_log"]))[:40]}
 def consultar_recolector(direccion, zona=None): return recorridos.consultar(load(), direccion, zona)
+def resumen():
+    with tx() as d:
+        ahora = now(); bl = [dict(b, vigente=bool(b["activo"] and b["hasta"] > ahora)) for b in reversed(d["bloqueos"])][:20]; g = {}
+        for r in d["reportes"]:
+            k = r.get("dev_hash")
+            if not k: continue
+            a = g.setdefault(k, {"dispositivo": k[:8], "ip": r.get("ip_mask"), "total": 0, "no_constatados": 0, "ultimo": ""})
+            a["total"] += 1; a["no_constatados"] += r["estado"] == "no_constatado"; a["ultimo"] = max(a["ultimo"], r["creado_en"])
+        return {"bloqueos": bl, "autores": sorted(g.values(), key=lambda a: -a["total"])[:10],
+                "usuarios": [{"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"]} for u in d["usuarios"]],
+                "datos": {"reportes": len(d["reportes"]), "archivo": _db.DATA}}
+def desbloquear(bid):
+    with tx() as d:
+        b = next((b for b in d["bloqueos"] if b["id"] == bid), None)
+        if not b: raise Conflicto("Bloqueo inexistente")
+        b["activo"] = 0; _log(d, "-", "Admin", f"Desbloquea el dispositivo {b['dev_hash'][:6]}…")
