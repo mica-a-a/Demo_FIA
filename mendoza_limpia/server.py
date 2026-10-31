@@ -1,22 +1,29 @@
 """Mendoza Limpia · servidor HTTP (solo biblioteca estándar de Python). Uso: python server.py [puerto]"""
 import json, os, re, sys, mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from app import db, models
+from app import db, models, auth
 from app.controllers import RUTAS
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 class H(BaseHTTPRequestHandler):
-    def _json(self, code, obj):
+    def _json(self, code, obj, headers=None):
         d = json.dumps(obj, ensure_ascii=False).encode(); self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
+        self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(d)))
+        for k, v in (headers or {}).items(): self.send_header(k, v)
+        self.end_headers(); self.wfile.write(d)
     def _api(self, method):
-        path = self.path.split("?")[0]
-        for mt, rx, fn in RUTAS:
+        path = self.path.split("?")[0]; r = auth.req          # contexto de la petición: sesión, IP, dispositivo, navegador
+        r.cookie = self.headers.get("Cookie"); r.user = auth.desde_cookie(r.cookie); r.ip = self.client_address[0]
+        r.dev = (self.headers.get("X-Device") or "")[:64]; r.ua = self.headers.get("User-Agent") or ""
+        for mt, rx, fn, roles in RUTAS:
             mm = re.fullmatch(rx, path)
             if mt == method and mm:
                 n = int(self.headers.get("Content-Length") or 0)
                 try: body = json.loads(self.rfile.read(n) or b"{}")
                 except ValueError: return self._json(400, {"error": "JSON inválido"})
-                try: return self._json(*fn(body, mm.groups()))
+                try:
+                    if roles: auth.requerir(roles)
+                    return self._json(*fn(body, mm.groups()))
+                except auth.Denegado as e: return self._json(e.code, {"error": str(e)})
                 except models.Conflicto as e: return self._json(409, {"error": str(e)})
         self._json(404, {"error": "No encontrado"})
     def do_GET(self):
