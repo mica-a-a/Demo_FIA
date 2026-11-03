@@ -28,7 +28,7 @@ def next_id(d, tabla):
 def _migrar():
     """Agrega usuarios, bloqueos y configuración si el archivo es de una versión anterior."""
     with tx() as d:
-        d.setdefault("bloqueos", []); d.setdefault("config", {}); d["config"].setdefault("sal", secrets.token_hex(8))
+        d.setdefault("bloqueos", []); d.setdefault("saltos", {}); d.setdefault("config", {}); d["config"].setdefault("sal", secrets.token_hex(8))
         d["seq"].setdefault("bloqueos", 0); d["seq"].setdefault("usuarios", 0)
         if not d.get("usuarios"):
             d["usuarios"] = []

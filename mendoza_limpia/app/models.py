@@ -7,19 +7,21 @@ class Conflicto(Exception): pass
 def _log(d, msg, actor, texto): d["eventos_log"].append({"id": next_id(d, "eventos_log"), "mensaje": msg, "actor": actor, "texto": texto, "creado_en": now()})
 def _mapa(d):
     val = Counter(r["zona_id"] for r in d["reportes"] if r["estado"] == "validado" and not r["usado"])
-    return predictor.puntajes(d["contexto"], d["zonas"], val)
+    return predictor.puntajes(d["contexto"], d["zonas"], val, d.get("saltos", {}))
+def _ruta(d):
+    pun = _mapa(d); return predictor.ruta(pun) + predictor.opcionales(pun), predictor.opcionales(pun)   # prioritarias primero, opcionales al final
 def _actual(d):
     for p in reversed(d["propuestas"]):
         if p["estado"] != "cerrada": return p
     c = d["contexto"]
-    p = {"id": next_id(d, "propuestas"), "turno": c["turno"], "clima": c["clima"], "evento": c["evento"], "ruta": predictor.ruta(_mapa(d)), "estado": "pendiente",
+    p = {"id": next_id(d, "propuestas"), "turno": c["turno"], "clima": c["clima"], "evento": c["evento"], "ruta": _ruta(d)[0], "opcionales": _ruta(d)[1], "estado": "pendiente",
          "ruta_final": None, "motivo": None, "decidido_por": None, "escalada": 0, "creado_en": now(), "decidido_en": None}
     d["propuestas"].append(p); _log(d, "6", "Agente 2", "Propone ruta y frecuencia por turno (zonas de riesgo alto primero)"); return p
 def _regenerar(d):
     """Si cambia el mapa de riesgo y la ruta aún no salió, la decisión previa queda obsoleta."""
     p = _actual(d)
     if p["estado"] != "despachada":
-        c = d["contexto"]; p.update(turno=c["turno"], clima=c["clima"], evento=c["evento"], ruta=predictor.ruta(_mapa(d)), estado="pendiente",
+        c = d["contexto"]; p.update(turno=c["turno"], clima=c["clima"], evento=c["evento"], ruta=_ruta(d)[0], opcionales=_ruta(d)[1], estado="pendiente",
                                     ruta_final=None, motivo=None, decidido_por=None, decidido_en=None, escalada=0)
 def _despacho(d):
     for p in reversed(d["propuestas"]):
@@ -94,26 +96,51 @@ def _verificables(d):
     p = next((p for p in reversed(d["propuestas"]) if p["estado"] == "despachada"), None)
     zn = {z["id"]: z["nombre"] for z in d["zonas"]}
     return [r for r in d["reportes"] if p and r["estado"] == "validado" and not r["usado"] and zn[r["zona_id"]] in (p["ruta_final"] or [])]
-def resultado(cont, desb, verifs=None):
+def _opcionales_verificar(d):
+    """Zonas de riesgo bajo incluidas en la ruta despachada que la cuadrilla debe informar (si no tienen un reclamo que ya se verifica)."""
+    x = _despacho(d); p = next((p for p in reversed(d["propuestas"]) if p["estado"] == "despachada"), None)
+    if not x or not p or not x["salida_confirmada_en"] or x["resultado_en"]: return []
+    zn = {z["id"]: z["nombre"] for z in d["zonas"]}; con_reclamo = {zn[r["zona_id"]] for r in _verificables(d)}
+    return [z for z in (p["ruta_final"] or []) if z in p.get("opcionales", []) and z not in con_reclamo]
+def resultado(cont, desb, verifs=None, opcionales=None):
     with tx() as d:
         x = _despacho(d)
         if not x or not x["salida_confirmada_en"]: raise Conflicto("Primero hay que confirmar la salida")
-        ver = _verificables(d); resp = {int(v.get("id", 0)): v for v in (verifs or [])}
+        ver = _verificables(d); ops = _opcionales_verificar(d); zn = {z["id"]: z["nombre"] for z in d["zonas"]}
+        resp = {int(v.get("id", 0)): v for v in (verifs or [])}; respo = {v.get("zona"): v for v in (opcionales or [])}
         for r in ver:
             if r["id"] not in resp: raise Conflicto(f"Falta responder sobre el reclamo #{r['id']}")
-        lev = des = 0
+        for z in ops:
+            if z not in respo: raise Conflicto(f"Falta responder sobre la zona opcional {z}")
+        lev = des = 0; visitadas = set()
         for r in ver:
             v = resp[r["id"]]
             if v.get("paso"):
+                visitadas.add(zn[r["zona_id"]])
                 if v.get("habia"):
                     n = max(0, int(v.get("cuantos") or 0)); r.update(estado="resuelto", levantados=n, comentario=None, resuelto_en=now()); lev += n; des += 1
                 else: r.update(estado="no_constatado", comentario="Desborde inexistente: la cuadrilla pasó y no lo encontró", resuelto_en=now())
             else: r.update(estado="pendiente", comentario="No atendido: " + (v.get("motivo") or "sin motivo"), validado_en=None)
         for r in ver:
             if r["estado"] == "no_constatado": security.falta(d, r)
-        if ver: cont, desb = lev, des
-        x.update(contenedores=max(0, int(cont)), desbordes=max(0, int(desb)), resultado_en=now())
-        _log(d, "10", "Cuadrilla", f"Informa el resultado real de la calle ({len(ver)} reclamos verificados)" if ver else "Informa el resultado real de la calle al Operador")
+        regs = []
+        for z in ops:                                   # zonas opcionales: ¿hubo espacio y tiempo? ¿se pasó? ¿había desborde?
+            v = respo[z]; ok = bool(v.get("espacio")) and bool(v.get("paso"))
+            reg = {"zona": z, "espacio": bool(v.get("espacio")), "paso": ok, "habia": None, "cuantos": None, "motivo": None}
+            if ok:
+                visitadas.add(z); reg["habia"] = bool(v.get("habia"))
+                if reg["habia"]: n = max(0, int(v.get("cuantos") or 0)); reg["cuantos"] = n; lev += n; des += 1
+            else: reg["motivo"] = v.get("motivo") or "sin motivo"
+            regs.append(reg)
+        p = next(p for p in reversed(d["propuestas"]) if p["estado"] == "despachada"); s = d.setdefault("saltos", {})
+        visitadas |= {z for z in (p["ruta_final"] or []) if z not in p.get("opcionales", [])}   # las zonas prioritarias de la ruta se dan por recorridas
+        for z in d["zonas"]:                            # turnos seguidos sin visita: sube la prioridad a partir del 2.º
+            k = str(z["id"])
+            if z["nombre"] in visitadas: s[k] = 0
+            elif z["nombre"] in p.get("opcionales", []): s[k] = s.get(k, 0) + 1
+        if ver or ops: cont, desb = lev, des
+        x.update(contenedores=max(0, int(cont)), desbordes=max(0, int(desb)), resultado_en=now(), opcionales=regs)
+        _log(d, "10", "Cuadrilla", f"Informa el resultado real de la calle ({len(ver)} reclamos y {len(ops)} zonas opcionales verificados)" if (ver or ops) else "Informa el resultado real de la calle al Operador")
 def nuevo_turno():
     with tx() as d:
         p = _actual(d)
@@ -137,6 +164,7 @@ def estado():
         rep = [dict({k: v for k, v in r.items() if k not in OCULTO}, zona=zn[r["zona_id"]]) for r in reversed(d["reportes"])][:40]
         c = Counter(r["estado"] for r in d["reportes"])
         return {"contexto": d["contexto"], "zonas": _mapa(d), "propuesta": dict(p), "despacho": _despacho(d), "reportes": rep, "recal": d["recalibraciones"][-1],
+                "opcionales_verificar": _opcionales_verificar(d),
                 "verificar": [dict({k: v for k, v in r.items() if k not in OCULTO}, zona=zn[r["zona_id"]]) for r in _verificables(d)],
                 "kpis": {"total": len(d["reportes"]), "pendientes": c["pendiente"], "validados": c["validado"], "descartados": c["descartado"], "resueltos": c["resuelto"]},
                 "log": list(reversed(d["eventos_log"]))[:40]}

@@ -511,3 +511,8 @@ th:last-child {
 .pill.no_constatado {
     background: #8a9a93
 }
+
+.route span.opc {
+    border-style: dashed;
+    opacity: .85
+}
