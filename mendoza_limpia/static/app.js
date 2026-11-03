@@ -32,7 +32,7 @@ function admin() {
     return `<div class="card"><h2>🚫 Bloqueos por reclamos reiterados</h2><p class="mu">Regla: más de 3 reclamos en 10 min o más de 10 en 24 h → 30 min; reincidencia → 1 h; luego 24 h. Cada reclamo «no constatado» cuenta como falta. La IP y el dispositivo se guardan hasheados.</p>
  <div class="tw"><table><tr><th>Dispositivo</th><th>IP parcial</th><th>Motivo</th><th>Hasta</th><th>Estado</th><th></th></tr>${A.bloqueos.map(b => `<tr><td>${esc(b.dev_hash.slice(0, 8))}</td><td>${esc(b.ip_mask)}</td><td>${esc(b.motivo)}</td><td>${b.hasta.slice(5, 16).replace("T", " ")}</td><td>${pill(b.vigente ? "alto" : "bajo", b.vigente ? "bloqueado" : "liberado")}</td><td>${b.vigente ? `<button class="b gh" onclick="desb(${b.id})">Desbloquear</button>` : ""}</td></tr>`).join("") || "<tr><td colspan=6 class='mu'>Sin bloqueos.</td></tr>"}</table></div></div>
 <div class="card"><h2>👥 Quiénes reclaman (agrupado por dispositivo)</h2><div class="tw"><table><tr><th>Dispositivo</th><th>IP parcial</th><th>Reclamos</th><th>No constatados</th><th>Último</th></tr>${A.autores.map(a => `<tr><td>${esc(a.dispositivo)}</td><td>${esc(a.ip || "")}</td><td>${a.total}</td><td>${a.no_constatados}</td><td>${a.ultimo.slice(5, 16).replace("T", " ")}</td></tr>`).join("") || "<tr><td colspan=5 class='mu'>Todavía no hay reclamos con dispositivo registrado.</td></tr>"}</table></div></div>
-<div class="card"><h2>🔑 Usuarios del sistema</h2>${A.usuarios.map(u => `<div class="rep"><span class="t"><b>${esc(u.usuario)}</b> · ${esc(u.nombre)}</span>${pill("medio", u.rol)}</div>`).join("")}<p class="mu">Los usuarios que reclaman no tienen cuenta: se los identifica por IP y dispositivo.</p></div>`
+<div class="card"><h2>🔑 Usuarios del sistema</h2>${A.usuarios.map(u => `<div class="rep"><span class="t"><b>${esc(u.usuario)}</b> · ${esc(u.nombre)}</span>${pill("medio", u.rol)}</div>`).join("")}<p class="mu">Los Contribuyentes que reclaman no tienen cuenta: se los identifica por IP y dispositivo.</p></div>`
 }
 function decPanel() {
     const p = E.propuesta;
@@ -74,7 +74,7 @@ function modoSet(m) { modo = m; rol = null; draw(); scrollTo(0, 0) }
 function landing() {
     return `<div class="hero"><h1>Mendoza Limpia</h1><p>Anticipamos dónde se va a acumular la basura para que la recolección llegue antes de que sea un problema.</p></div>
 <h2>¿Cómo ingresás?</h2><div class="grid">
-<button class="role" onclick="modoSet('usuario')"><span class="ic">👤</span><b>Usuario</b><small>Sin cuenta: hacé un reclamo o consultá cuándo pasa el recolector.</small></button>
+<button class="role" onclick="modoSet('Contribuyente')"><span class="ic">👤</span><b>Contribuyente</b><small>Sin cuenta: hacé un reclamo o consultá cuándo pasa el recolector.</small></button>
 <button class="role" onclick="modoSet('personal')"><span class="ic">🔐</span><b>Personal</b><small>Operador, administración y desarrollo (con usuario y contraseña).</small></button></div>`}
 function usuario() {
     return `<div class="hero"><h1>Hola 👋</h1><p>Contanos qué pasa en tu barrio o consultá cuándo pasa el recolector.</p></div><div class="grid">
