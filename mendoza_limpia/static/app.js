@@ -74,7 +74,7 @@ function modoSet(m) { modo = m; rol = null; draw(); scrollTo(0, 0) }
 function landing() {
     return `<div class="hero"><h1>Mendoza Limpia</h1><p>Anticipamos dónde se va a acumular la basura para que la recolección llegue antes de que sea un problema.</p></div>
 <h2>¿Cómo ingresás?</h2><div class="grid">
-<button class="role" onclick="modoSet('Contribuyente')"><span class="ic">👤</span><b>Contribuyente</b><small>Sin cuenta: hacé un reclamo o consultá cuándo pasa el recolector.</small></button>
+<button class="role" onclick="modoSet('usuario')"><span class="ic">👤</span><b>Contribuyente</b><small>Sin cuenta: hacé un reclamo o consultá cuándo pasa el recolector.</small></button>
 <button class="role" onclick="modoSet('personal')"><span class="ic">🔐</span><b>Personal</b><small>Operador, administración y desarrollo (con usuario y contraseña).</small></button></div>`}
 function usuario() {
     return `<div class="hero"><h1>Hola 👋</h1><p>Contanos qué pasa en tu barrio o consultá cuándo pasa el recolector.</p></div><div class="grid">
@@ -83,7 +83,7 @@ function usuario() {
 const TIPOS = ["Desborde de basura", "Contenedor roto o faltante", "Basural / residuos en la calle", "Recolección que no pasó", "Otro"];
 const zonasOrd = () => E.zonas.map(z => z.nombre).sort().map(n => `<option>${esc(n)}</option>`).join("");
 function ureclamo() {
-    return `<div class="card"><h2>📝 Hacer un reclamo</h2><p class="mu">Tu reclamo llega al panel del Operador de Higiene Urbana, que lo revisa y lo valida antes de usarlo. Para evitar abusos registramos tu dirección IP y tu dispositivo (Ley 25.326); los reclamos reiterados pueden bloquearse por un tiempo.</p>
+    return `<div class="card"><h2>📝 Hacer un reclamo</h2><p class="mu">Tu reclamo llega al panel del Operador de Higiene Urbana, que lo revisa y lo valida antes de usarlo. Para evitar abusos registramos tu dirección IP y tu dispositivo (Ley 25.326); reiterados reclamos falsos pueden bloquearse por un tiempo.</p>
 <div class="row"><select id="ut">${TIPOS.map(t => `<option>${t}</option>`).join("")}</select><select id="uz">${zonasOrd()}</select></div>
 <div class="row" style="margin-top:8px"><input id="ud" placeholder="Dirección o referencia (ej: San Martín 1200)" style="flex:1;min-width:220px"><input id="ux" placeholder="Contanos qué pasa" maxlength="300" style="flex:2;min-width:220px"></div>
 <p><button class="b" onclick="uenviar()">Enviar reclamo</button></p></div>
